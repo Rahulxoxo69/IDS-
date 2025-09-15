@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoT Sentinel | AI Intrusion Detection</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#111827;--card:rgba(31,41,55,0.55);--border:rgba(255,255,255,0.08);--text:#f3f4f6;--text2:#9ca3af;--accent:#38bdf8;--danger:#f43f5e;--success:#34d399;}
+    html.light{--bg:#f9fafb;--card:rgba(255,255,255,0.65);--border:rgba(0,0,0,0.08);--text:#111827;--text2:#4b5563;}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);transition:background .3s,color .3s;}
+    .glass{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);background:var(--card);border:1px solid var(--border);}
+    .glow{box-shadow:0 0 20px -5px var(--accent),inset 0 0 20px -10px var(--accent);}
+    .row-enter{animation:rowIn .4s ease forwards;}
+    .pulse-dot{animation:pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;}
+    @keyframes rowIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes pulse{0%, 100%{opacity:1;}50%{opacity:.5;}}
+    #threatArc{stroke-dasharray:314;stroke-dashoffset:314;transition:stroke-dashoffset .6s,stroke .6s;}
+    .status-connecting{background:linear-gradient(45deg,#fbbf24,#f59e0b);animation:pulse 2s infinite;}
+    .status-connected{background:#34d399;}
+    .status-error{background:#f43f5e;animation:pulse 1s infinite;}
+    .counter{transition:all 0.3s ease;}
+  </style>
+</head>
+<body class="antialiased">
+<header class="w-full px-6 py-4 glass sticky top-0 z-20">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-indigo-500 bg-clip-text text-transparent">IoT Sentinel</h1>
+      <p class="text-sm text-gray-400">AI-driven intrusion detection</p>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span id="statusDot" class="w-3 h-3 rounded-full status-connecting"></span>
+        <span id="statusTxt" class="text-sm text-gray-300">Connecting</span>
+      </div>
+      <div class="text-xs text-gray-400">
+        <div>Interface: <span id="networkInterface" class="text-cyan-400">--</span></div>
+        <div>API: <span id="apiStatus" class="text-yellow-400">Connecting</span></div>
+      </div>
+      <button id="themeBtn" class="p-2 rounded-full glass hover:scale-110 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path id="themeIcon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-6 grid gap-6">
+  <!-- KPI row -->
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="glass rounded-2xl p-5">
+      <h3 class="text-sm text-gray-400">Total Devices</h3>
+      <p id="totalDevices" class="text-3xl font-bold mt-1 counter">0</p>
+      <div class="mt-3 flex items-center gap-2 text-xs text-gray-400">
+        <span class="w-2 h-2 rounded-full bg-green-400"></span>
+        <span id="onlineDevices">0 online</span>
+        <span class="mx-1">•</span>
+        <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+        <span id="offlineDevices">0 offline</span>
+      </div>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <h3 class="text-sm text-gray-400">Packets Analysed</h3>
+      <p id="totalPackets" class="text-3xl font-bold mt-1 counter">0</p>
+      <p class="mt-2 text-xs text-gray-400">Per minute: <span id="packetsMin" class="text-cyan-400">0</span></p>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <h3 class="text-sm text-gray-400">Threats Detected</h3>
+      <p id="totalThreats" class="text-3xl font-bold mt-1 text-rose-400 counter">0</p>
+      <p class="mt-2 text-xs text-gray-400">Per hour: <span id="threatsHour" class="text-rose-400">0</span></p>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <h3 class="text-sm text-gray-400">System Status</h3>
+      <p id="uptime" class="text-3xl font-bold mt-1">00:00:00</p>
+      <p class="mt-2 text-xs text-gray-400">CPU: <span id="cpuUsage">0%</span> | RAM: <span id="memUsage">0%</span></p>
+    </div>
+  </section>
+
+  <!-- mid row -->
+  <section class="grid md:grid-cols-3 gap-4">
+    <div class="glass rounded-2xl p-5 flex flex-col items-center justify-center">
+      <h3 class="font-semibold mb-4">Threat Level</h3>
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        <circle cx="80" cy="80" r="70" stroke="var(--border)" stroke-width="12" fill="none"/>
+        <circle id="threatArc" cx="80" cy="80" r="70" stroke="var(--success)" stroke-width="12" fill="none" stroke-linecap="round" transform="rotate(-135 80 80)"/>
+        <text id="threatLabel" x="80" y="85" text-anchor="middle" fill="var(--text)" class="text-lg font-bold">LOW</text>
+      </svg>
+      <p id="threatDesc" class="mt-3 text-sm text-gray-400">No significant threats</p>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-semibold mb-3">Device Distribution</h3>
+      <div class="h-48"><canvas id="deviceChart"></canvas></div>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-semibold mb-3">Threat Types</h3>
+      <div class="h-48"><canvas id="threatChart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- events -->
+  <section class="glass rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold">Real-Time Security Events</h3>
+      <div class="flex items-center gap-4">
+        <span class="text-xs text-gray-400">Last update: <span id="lastUpdate">Never</span></span>
+        <label class="flex items-center gap-2 text-sm text-gray-400">
+          <input id="autoRefresh" type="checkbox" class="hidden" checked>
+          <span class="relative w-9 h-5 bg-gray-600 rounded-full cursor-pointer transition">
+            <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform"></span>
+          </span>
+          Auto-refresh
+        </label>
+      </div>
+    </div>
+    <div class="overflow-auto max-h-[28rem] pr-2 -mr-2">
+      <table class="w-full text-sm">
+        <thead class="text-xs text-gray-400 uppercase sticky top-0 bg-[var(--bg)]">
+          <tr>
+            <th class="py-3 px-4 text-left">Time</th>
+            <th class="py-3 px-4 text-left">Device</th>
+            <th class="py-3 px-4 text-left">Source IP</th>
+            <th class="py-3 px-4 text-left">Alert Type</th>
+            <th class="py-3 px-4 text-left">Severity</th>
+            <th class="py-3 px-4 text-left">Size</th>
+          </tr>
+        </thead>
+        <tbody id="eventBody">
+          <tr>
+            <td colspan="6" class="text-center py-8 text-gray-500">
+              <div class="flex flex-col items-center">
+                <svg class="w-10 h-10 mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span>Loading IoT device data…</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="text-center text-xs text-gray-500 py-6">
+  IoT Sentinel &copy; <span id="year"></span> — AI intrusion detection system
+</footer>
+
+<script>
+/* ---------- Configuration ---------- */
+const API_BASE = window.location.origin; // Use same origin as dashboard
+const UPDATE_INTERVAL = 2000; // 2 seconds
+const DEBUG_MODE = true;
+
+/* ---------- Theme System ---------- */
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+const themeIcon = document.getElementById('themeIcon');
+
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const stored = localStorage.theme;
+
+if (stored ? stored === 'dark' : prefersDark) {
+    html.classList.add('dark');
+}
+
+function applyIcon() {
+    const dark = html.classList.contains('dark');
+    themeIcon.setAttribute('d', dark ? 
+        'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' : 
+        'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z');
+}
+
+applyIcon();
+themeBtn.onclick = () => {
+    html.classList.toggle('dark');
+    localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    applyIcon();
+};
+
+/* ---------- Dashboard State ---------- */
+let deviceChart, threatChart;
+let startTime = Date.now();
+let lastPackets = 0, lastThreats = 0;
+let connectionRetries = 0;
+const MAX_RETRIES = 5;
+
+// DOM elements cache
+const els = {
+    statusDot: document.getElementById('statusDot'),
+    statusTxt: document.getElementById('statusTxt'),
+    apiStatus: document.getElementById('apiStatus'),
+    networkInterface: document.getElementById('networkInterface'),
+    totalDevices: document.getElementById('totalDevices'),
+    onlineDevices: document.getElementById('onlineDevices'),
+    offlineDevices: document.getElementById('offlineDevices'),
+    totalPackets: document.getElementById('totalPackets'),
+    packetsMin: document.getElementById('packetsMin'),
+    totalThreats: document.getElementById('totalThreats'),
+    threatsHour: document.getElementById('threatsHour'),
+    uptime: document.getElementById('uptime'),
+    cpuUsage: document.getElementById('cpuUsage'),
+    memUsage: document.getElementById('memUsage'),
+    threatLabel: document.getElementById('threatLabel'),
+    threatDesc: document.getElementById('threatDesc'),
+    threatArc: document.getElementById('threatArc'),
+    eventBody: document.getElementById('eventBody'),
+    autoRefresh: document.getElementById('autoRefresh'),
+    lastUpdate: document.getElementById('lastUpdate'),
+    year: document.getElementById('year')
+};
+
+els.year.textContent = new Date().getFullYear();
+
+/* ---------- Utility Functions ---------- */
+function debugLog(message, data = null) {
+    if (DEBUG_MODE) {
+        console.log(`[Dashboard] ${message}`, data || '');
+    }
+}
+
+function formatTime(date = new Date()) {
+    return date.toLocaleTimeString();
+}
+
+function formatUptime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function animateCounter(element, targetValue, duration = 500) {
+    if (!element) return;
+    
+    const startValue = parseInt(element.textContent.replace(/,/g, '')) || 0;
+    const difference = targetValue - startValue;
+    
+    if (difference === 0) return;
+    
+    const startTime = performance.now();
+    
+    function updateCounter(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        const currentValue = Math.floor(startValue + (difference * progress));
+        element.textContent = currentValue.toLocaleString();
+        
+        if (progress < 1) {
+            requestAnimationFrame(updateCounter);
+        } else {
+            element.textContent = targetValue.toLocaleString();
+        }
+    }
+    
+    requestAnimationFrame(updateCounter);
+}
+
+/* ---------- Chart Management ---------- */
+function createCharts() {
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: '#9ca3af',
+                    padding: 15,
+                    font: { size: 11 }
+                }
+            }
+        }
+    };
+
+    // Device distribution chart
+    deviceChart = new Chart(document.getElementById('deviceChart'), {
+        type: 'pie',
+        data: {
+            labels: ['Loading...'],
+            datasets: [{
+                data: [1],
+                backgroundColor: ['#6b7280'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: chartOptions
+    });
+
+    // Threat types chart
+    threatChart = new Chart(document.getElementById('threatChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['No Threats'],
+            datasets: [{
+                data: [1],
+                backgroundColor: ['#6b7280'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            ...chartOptions,
+            cutout: '60%'
+        }
+    });
+}
+
+function updateChart(chart, dataObject) {
+    if (!chart || !dataObject) return;
+
+    const labels = Object.keys(dataObject);
+    const data = Object.values(dataObject);
+    const colors = ['#38bdf8', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+    if (labels.length === 0) {
+        chart.data.labels = ['No Data'];
+        chart.data.datasets[0].data = [1];
+        chart.data.datasets[0].backgroundColor = ['#6b7280'];
+    } else {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = data;
+        chart.data.datasets[0].backgroundColor = labels.map((_, i) => colors[i % colors.length]);
+    }
+    
+    chart.update('none'); // No animation for better performance
+}
+
+/* ---------- Status Management ---------- */
+function updateConnectionStatus(status, message = '') {
+    const statusClasses = {
+        connecting: 'status-connecting',
+        connected: 'status-connected',
+        error: 'status-error'
+    };
+
+    els.statusDot.className = `w-3 h-3 rounded-full ${statusClasses[status] || 'status-connecting'}`;
+    els.statusTxt.textContent = message || status;
+    els.apiStatus.textContent = status;
+    els.apiStatus.className = status === 'connected' ? 'text-green-400' : 
+                               status === 'error' ? 'text-red-400' : 'text-yellow-400';
+}
+
+/* ---------- Table Management ---------- */
+function updateAlertsTable(alerts) {
+    if (!alerts || alerts.length === 0) {
+        // Show a message if no alerts
+        if (els.eventBody.children.length === 0 || els.eventBody.querySelector('td[colspan]')) {
+            els.eventBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-8 text-gray-500">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>No security events detected</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        return;
+    }
+
+    // Clear loading message if present
+    const loadingRow = els.eventBody.querySelector('td[colspan]');
+    if (loadingRow) {
+        els.eventBody.innerHTML = '';
+    }
+
+    // Add new alerts (limit to 50 for performance)
+    alerts.slice(0, 50).forEach((alert, index) => {
+        // Skip if alert already exists (basic duplicate check)
+        const alertId = `${alert.time}-${alert.src_ip}-${alert.dst_port}`;
+        const existingAlert = els.eventBody.querySelector(`tr[data-alert-id="${alertId}"]`);
+        if (existingAlert) return;
+
+        const row = document.createElement('tr');
+        row.className = 'border-b border-[var(--border)] row-enter hover:bg-[var(--card)] transition-colors';
+        row.setAttribute('data-alert-id', alertId);
+
+        const severity = getSeverityInfo(alert);
+        
+        row.innerHTML = `
+            <td class="px-4 py-3 text-sm font-mono">${alert.time}</td>
+            <td class="px-4 py-3 text-sm">${alert.device_id || 'Unknown'}</td>
+            <td class="px-4 py-3 font-mono text-xs">${alert.src_ip}</td>
+            <td class="px-4 py-3 text-sm">${alert.type}</td>
+            <td class="px-4 py-3">
+                <span class="px-2 py-1 rounded text-xs font-semibold ${severity.class}">
+                    ${severity.level}
+                </span>
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-400">${alert.packet_length || 0}B</td>
+        `;
+
+        els.eventBody.insertBefore(row, els.eventBody.firstChild);
+    });
+
+    // Remove excess rows (keep max 100)
+    while (els.eventBody.children.length > 100) {
+        els.eventBody.removeChild(els.eventBody.lastChild);
+    }
+}
+
+function getSeverityInfo(alert) {
+    const type = alert.type.toLowerCase();
+    
+    if (type.includes('ddos') || type.includes('critical')) {
+        return { level: 'Critical', class: 'bg-rose-900/70 text-rose-200 border border-rose-700' };
+    } else if (type.includes('port') || type.includes('scan') || alert.severity === 'High') {
+        return { level: 'High', class: 'bg-orange-900/70 text-orange-200 border border-orange-700' };
+    } else if (type.includes('anomaly') || alert.severity === 'Medium') {
+        return { level: 'Medium', class: 'bg-yellow-900/70 text-yellow-200 border border-yellow-700' };
+    } else {
+        return { level: 'Low', class: 'bg-green-900/70 text-green-200 border border-green-700' };
+    }
+}
+
+/* ---------- Threat Level Visualization ---------- */
+function updateThreatLevel(totalThreats, totalPackets) {
+    let level, color, label, description;
+    
+    const threatRatio = totalPackets > 0 ? (totalThreats / totalPackets) * 100 : 0;
+    
+    if (threatRatio >= 5 || totalThreats > 100) {
+        level = 100; color = '#f43f5e'; label = 'CRITICAL';
+        description = 'High threat activity detected';
+    } else if (threatRatio >= 2 || totalThreats > 50) {
+        level = 75; color = '#f59e0b'; label = 'HIGH';
+        description = 'Elevated threat level';
+    } else if (threatRatio >= 0.5 || totalThreats > 20) {
+        level = 50; color = '#eab308'; label = 'MEDIUM';
+        description = 'Moderate threat activity';
+    } else if (totalThreats > 0) {
+        level = 25; color = '#34d399'; label = 'LOW';
+        description = 'Low threat activity';
+    } else {
+        level = 0; color = '#34d399'; label = 'NORMAL';
+        description = 'No threats detected';
+    }
+
+    els.threatLabel.textContent = label;
+    els.threatDesc.textContent = description;
+    els.threatArc.style.strokeDashoffset = 314 - (314 * level / 100);
+    els.threatArc.style.stroke = color;
+}
+
+/* ---------- Data Fetching ---------- */
+async function fetchDashboardData() {
+    if (!els.autoRefresh.checked) {
+        debugLog('Auto-refresh disabled, skipping fetch');
+        return;
+    }
+
+    try {
+        updateConnectionStatus('connecting', 'Fetching data...');
+        
+        const response = await fetch(`${API_BASE}/stats`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        debugLog('Received data:', data);
+
+        // Update connection status
+        updateConnectionStatus('connected', 'Connected');
+        connectionRetries = 0;
+
+        // Update network interface info
+        if (data.interface_info) {
+            els.networkInterface.textContent = data.interface_info.selected || 'default';
+        }
+
+        // Update counters with animation
+        animateCounter(els.totalPackets, data.total_packets || 0);
+        animateCounter(els.totalThreats, data.total_threats || 0);
+        animateCounter(els.packetsMin, data.packets_per_minute || 0);
+        animateCounter(els.threatsHour, data.threats_per_hour || 0);
+
+        // Update system info
+        if (data.system_info) {
+            const sysInfo = data.system_info;
+            els.cpuUsage.textContent = `${(sysInfo.cpu_usage || 0).toFixed(1)}%`;
+            els.memUsage.textContent = `${(sysInfo.memory_usage || 0).toFixed(1)}%`;
+            els.uptime.textContent = formatUptime(sysInfo.uptime || 0);
+        }
+
+        // Update device counts
+        const deviceCount = Object.values(data.device_types || {}).reduce((sum, count) => sum + count, 0);
+        els.totalDevices.textContent = deviceCount.toLocaleString();
+        els.onlineDevices.textContent = `${Math.floor(deviceCount * 0.85)} online`;
+        els.offlineDevices.textContent = `${Math.ceil(deviceCount * 0.15)} offline`;
+
+        // Update charts
+        updateChart(deviceChart, data.device_types);
+        updateChart(threatChart, data.threat_types);
+
+        // Update threat level visualization
+        updateThreatLevel(data.total_threats || 0, data.total_packets || 0);
+
+        // Update alerts table
+        if (data.live_alerts && data.live_alerts.length > 0) {
+            updateAlertsTable(data.live_alerts);
+        }
+
+        // Update last refresh time
+        els.lastUpdate.textContent = formatTime();
+
+    } catch (error) {
+        debugLog('Fetch error:', error);
+        
+        connectionRetries++;
+        const retryMessage = connectionRetries < MAX_RETRIES ? 
+            `Connection failed (retry ${connectionRetries}/${MAX_RETRIES})` : 
+            'Connection lost';
+            
+        updateConnectionStatus('error', retryMessage);
+        
+        // Show error in table if no data
+        if (els.eventBody.children.length <= 1) {
+            els.eventBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-8 text-red-400">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Unable to connect to IoT Sentinel API</span>
+                            <span class="text-xs mt-1 text-gray-500">Check if server is running on ${API_BASE}</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+/* ---------- Auto-refresh Toggle ---------- */
+els.autoRefresh.addEventListener('change', function() {
+    const toggle = this.nextElementSibling.querySelector('span:last-child');
+    if (this.checked) {
+        toggle.style.transform = 'translateX(16px)';
+        debugLog('Auto-refresh enabled');
+        fetchDashboardData(); // Immediate fetch when enabled
+    } else {
+        toggle.style.transform = 'translateX(0)';
+        debugLog('Auto-refresh disabled');
+    }
+});
+
+// Initialize toggle state
+if (els.autoRefresh.checked) {
+    els.autoRefresh.nextElementSibling.querySelector('span:last-child').style.transform = 'translateX(16px)';
+}
+
+/* ---------- Initialization ---------- */
+function initializeDashboard() {
+    debugLog('Initializing dashboard...');
+    
+    // Create charts
+    createCharts();
+    
+    // Initial data fetch
+    fetchDashboardData();
+    
+    // Set up periodic updates
+    setInterval(fetchDashboardData, UPDATE_INTERVAL);
+    
+    // Set up uptime counter (independent of API)
+    setInterval(() => {
+        const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+        els.uptime.textContent = formatUptime(uptimeSeconds);
+    }, 1000);
+    
+    debugLog('Dashboard initialized successfully');
+}
+
+// Start the dashboard when DOM is loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeDashboard);
+} else {
+    initializeDashboard();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[server]
+interface = "\\Device\\NPF_{3B890504-D845-4189-B782-3C938A457851}"
+flask_host = "0.0.0.0"
+flask_port = 5000
+max_alerts = 100
+batch_size = 10  # Reduced for more frequent updates
+log_file = "logs/ids_server.log"
+
+[model]
+contamination = 0.1
+epochs = 30
+learning_rate = 1e-3
+
+[auth]
+hmac_key = "change-me-32-byte-secret"
