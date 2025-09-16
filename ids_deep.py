@@ -117,3 +117,51 @@ def ensure_dataframe_structure(df, expected_columns):
     # Reorder columns to match the expected structure
     df = df[expected_columns]
     return df
+
+if __name__ == "__main__":
+    # Create an instance of IDSEngine
+    engine = IDSEngine()
+    
+    # Load the model if it exists, otherwise train it
+    if not engine.load_model():
+        print("Model not found. Training new model...")
+        engine.train_model()
+    else:
+        print("Model loaded successfully.")
+    
+    # Generate test data: 1000 normal samples and 200 anomalous samples
+    np.random.seed(42)  # For reproducibility
+    
+    # Generate normal test data
+    normal_test = pd.DataFrame({
+        'protocol': np.random.choice([0, 1], 1000, p=[.7, .3]),
+        'packet_length': np.random.normal(500, 100, 1000).astype(int),
+        'ttl': np.random.normal(64, 10, 1000).astype(int),
+        'tcp_flags': np.random.choice([16, 24], 1000, p=[.8, .2]),
+        'window_size': np.random.normal(64240, 1000, 1000).astype(int),
+        'payload_length': np.random.normal(200, 50, 1000).astype(int),
+        'entropy': np.random.normal(4, 1, 1000).clip(0, 8),
+        'payload_ratio': np.random.normal(0.4, 0.1, 1000).clip(0, 1),
+        'dst_port': np.random.choice([80, 443, 22, 23, 1883], 1000)
+    })
+    
+    # Generate anomalous test data
+    anomalous_test = pd.DataFrame({
+        'protocol': np.random.choice([2, 3], 200, p=[0.5, 0.5]),  # ICMP or other
+        'packet_length': np.random.normal(1500, 200, 200).astype(int),  # Large packets
+        'ttl': np.random.normal(1, 5, 200).astype(int).clip(1),  # Low TTL
+        'tcp_flags': np.random.choice([2, 4, 8], 200),  # SYN, RST, etc.
+        'window_size': np.random.normal(0, 1000, 200).astype(int).clip(0),  # Low window size
+        'payload_length': np.random.normal(0, 10, 200).astype(int).clip(0),  # Low payload
+        'entropy': np.random.normal(7, 1, 200).clip(0, 8),  # High entropy
+        'payload_ratio': np.random.normal(0.9, 0.1, 200).clip(0, 1),  # High payload ratio
+        'dst_port': np.random.choice([21, 25, 53, 139, 445, 8080], 200)  # Uncommon ports
+    })
+    
+    # Combine normal and anomalous data
+    X_test = pd.concat([normal_test, anomalous_test], ignore_index=True)
+    y_test = np.array([0] * len(normal_test) + [1] * len(anomalous_test))  # Labels: 0 for normal, 1 for anomalous
+    
+    # Evaluate the model
+    print("Evaluating model on test data...")
+    engine.evaluate(X_test, y_test)
